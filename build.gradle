@@ -1,0 +1,87 @@
+plugins {
+    id 'java'
+    id 'maven-publish'
+    id 'com.gradleup.shadow' version '9.1.0'
+}
+
+group = 'net.YaRh'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+
+    maven {
+        url = uri("https://maven.pkg.github.com/Yet-Another-Rabbit-Hole/CheapLog")
+
+        credentials {
+            username = System.getenv("GITHUB_ACTOR")
+                    ?: project.findProperty("gpr.user") as String
+
+            password = System.getenv("GITHUB_TOKEN")
+                    ?: project.findProperty("gpr.key") as String
+        }
+    }
+
+    maven {
+        url = uri("https://maven.pkg.github.com/Yet-Another-Rabbit-Hole/ConvenientConfiguration")
+
+        credentials {
+            username = System.getenv("GITHUB_ACTOR")
+                    ?: project.findProperty("gpr.user") as String
+
+            password = System.getenv("GITHUB_TOKEN")
+                    ?: project.findProperty("gpr.key") as String
+        }
+    }
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:6.0.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    implementation 'net.YaRh:cheaplog:3.0.0'
+    implementation 'net.YaRh:convconf:1.2.0'
+
+    implementation files('libs/sas.jar')
+}
+
+test {
+    useJUnitPlatform()
+    failOnNoDiscoveredTests = false
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            artifact jar
+            artifact shadowJar
+            artifactId = 'visualsort'
+        }
+    }
+
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = "https://maven.pkg.github.com/Yet-Another-Rabbit-Hole/VisualSort"
+
+            credentials {
+                username = System.getenv("GITHUB_ACTOR")
+                password = System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
+}
+
+shadowJar {
+    archiveClassifier = 'all'
+}
+
+tasks.register("updateLocal") {
+    dependsOn testClasses
+    dependsOn jar
+    dependsOn shadowJar
+    dependsOn javadoc
+    dependsOn publishToMavenLocal
+}
