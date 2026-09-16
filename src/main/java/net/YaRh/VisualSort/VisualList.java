@@ -19,18 +19,35 @@ public class VisualList extends ArrayList<Integer> {
 	public static final Logger LOGGER = new Logger("VisualList");
 	
 	private static Rectangle newRectangle(int e) {
-		int offset = columnSpacing.get();
-		offset += (columnWidth.get() + columnSpacing.get()) * columns.size();
+		int offset = columnSpacing.get() + (columnWidth.get() + columnSpacing.get()) * columns.size();
+		int columnHeight = max(e, minColumnHeight.get());
+		Color c = Config.stepByStep.get()
+				? addedColumnColor.get()
+				: defaultColumnColor.get();
+		int y = window.getHeight() - columnSpacing.get() - columnHeight;
+		int width = columnWidth.get();
 		
-		return new Rectangle(
-				offset,
-				window.getHeight() - columnSpacing.get(),
-				columnWidth.get(),
-				max(e, minColumnHeight.get()),
-				Config.stepByStep.get()
-						? addedColumnColor.get()
-						: defaultColumnColor.get()
-		);
+		Rectangle r = recycleRectangle(offset, y, width, columnHeight, c);
+		if (r != null) return r;
+		return new Rectangle(offset, y, width, columnHeight, c);
+	}
+	
+	private static Rectangle recycleRectangle(int x, int y, int width, int height, Color c) {
+		if (deletedColumns.isEmpty()) return null;
+		
+		Rectangle r = deletedColumns.remove(0);
+		
+		r.moveTo(x, y);
+		r.scaleTo(width, height);
+		r.setHidden(false);
+		
+		return r;
+	}
+	
+	private static void removeRectangle(int index) {
+		Rectangle r = columns.remove(index);
+		r.setHidden(true);
+		deletedColumns.add(r);
 	}
 	
 	static void setBGColor(Color color) {
@@ -40,6 +57,22 @@ public class VisualList extends ArrayList<Integer> {
 	static void setStepByStep(boolean sbs) {
 		step.setHidden(!sbs);
 		step.setActivated(!sbs);
+	}
+	
+	/**
+	 * Calling this method on a method ensures that the values get swapped even if the list isn't a {@link VisualList}
+	 * <p>
+	 * But if it is, {@link VisualList#swap(int, int)} is called on the list, making it visual
+	 */
+	public static void swap(List<Integer> list, int i1, int i2) {
+		if (list instanceof VisualList vList) {
+			vList.swap(i1, i2);
+		} else {
+			int v1 = list.get(i1);
+			int v2 = list.get(i2);
+			list.set(i1, v2);
+			list.set(i2, v1);
+		}
 	}
 	
 	private static final View window = new View(
@@ -53,6 +86,7 @@ public class VisualList extends ArrayList<Integer> {
 			"Step", Color.GRAY
 	);
 	public static final List<Rectangle> columns = new ArrayList<>();
+	public static final List<Rectangle> deletedColumns = new ArrayList<>();
 	
 	private static boolean inUse = false;
 	
@@ -84,7 +118,6 @@ public class VisualList extends ArrayList<Integer> {
 		
 		columns.add(newRectangle(e));
 		
-		step();
 		updateWindow();
 		
 		return true;
@@ -102,7 +135,7 @@ public class VisualList extends ArrayList<Integer> {
 			step();
 		}
 		
-		columns.remove(index);
+		removeRectangle(index);
 		
 		updateWindow();
 		
@@ -118,7 +151,6 @@ public class VisualList extends ArrayList<Integer> {
 		
 		columns.add(index, newRectangle(element));
 		
-		step();
 		updateWindow();
 	}
 	
@@ -130,6 +162,7 @@ public class VisualList extends ArrayList<Integer> {
 		LOGGER.log.println("Setting value at %d to %d", index, element);
 		
 		columns.get(index).setColor(alteredColumnColor.get());
+		
 		updateWindow();
 		
 		return res;
@@ -148,7 +181,6 @@ public class VisualList extends ArrayList<Integer> {
 		}
 		columns.addAll(l);
 		
-		step();
 		updateWindow();
 		
 		return true;
@@ -167,7 +199,6 @@ public class VisualList extends ArrayList<Integer> {
 		}
 		columns.addAll(index, l);
 		
-		step();
 		updateWindow();
 		
 		return true;
@@ -185,23 +216,26 @@ public class VisualList extends ArrayList<Integer> {
 			step();
 		}
 		
-		columns.clear();
+		for (int i = 0; i < columns.size(); i++)
+			removeRectangle(i);
 		
 		updateWindow();
 	}
 	
 	/**
-	 * Swaps two ints in the list
+	 * Swaps two ints in the list, marking them in the window in {@link Config#swappedColumnColor}
 	 */
 	public void swap(int i1, int i2) {
-		super.add(super.remove(i1), i2);
+		int v1 = super.get(i1);
+		int v2 = super.get(i2);
+		super.set(i1, v2);
+		super.set(i2, v1);
 		
 		LOGGER.log.println("Swapping ints %d and %d", i1, i2);
 		
 		columns.get(i1).setColor(swappedColumnColor.get());
 		columns.get(i2).setColor(swappedColumnColor.get());
 		
-		step();
 		updateWindow();
 	}
 	
@@ -262,7 +296,10 @@ public class VisualList extends ArrayList<Integer> {
 	}
 	
 	public void step() {
-		if (stepDelay.get() != null) window.wait((int) (stepDelay.get() * 100));
+		if (stepDelay.get() != null) {
+			window.wait((int) (stepDelay.get() * 100));
+			return;
+		}
 		if (!stepByStep.get()) return;
 		do {
 			window.wait(100);
@@ -306,7 +343,7 @@ public class VisualList extends ArrayList<Integer> {
 	}
 	
 	public void sort() {
-		LOGGER.log.println("Ordering list");
+		LOGGER.log.println("Sorting list");
 		
 		info.println(this);
 		Collections.sort(this);
