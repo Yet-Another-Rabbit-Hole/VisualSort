@@ -2,8 +2,6 @@ package net.YaRh.VisualSort;
 
 import net.YaRh.CheapLog.logging.Logger;
 import sas.Rectangle;
-import sas.View;
-import sasio.Button;
 
 import java.awt.*;
 import java.util.ArrayList;
@@ -12,52 +10,12 @@ import java.util.Collections;
 import java.util.List;
 
 import static java.lang.Math.max;
-import static net.YaRh.CheapLog.Logging.*;
+import static java.lang.Math.min;
+import static net.YaRh.CheapLog.Logging.info;
 import static net.YaRh.VisualSort.Config.*;
 
 public class VisualList extends ArrayList<Integer> {
 	public static final Logger LOGGER = new Logger("VisualList");
-	
-	private static Rectangle newRectangle(int e) {
-		int offset = columnSpacing.get() + (columnWidth.get() + columnSpacing.get()) * columns.size();
-		int columnHeight = max(e, minColumnHeight.get());
-		Color c = Config.stepByStep.get()
-				? addedColumnColor.get()
-				: defaultColumnColor.get();
-		int y = window.getHeight() - columnSpacing.get() - columnHeight;
-		int width = columnWidth.get();
-		
-		Rectangle r = recycleRectangle(offset, y, width, columnHeight, c);
-		if (r != null) return r;
-		return new Rectangle(offset, y, width, columnHeight, c);
-	}
-	
-	private static Rectangle recycleRectangle(int x, int y, int width, int height, Color c) {
-		if (deletedColumns.isEmpty()) return null;
-		
-		Rectangle r = deletedColumns.remove(0);
-		
-		r.moveTo(x, y);
-		r.scaleTo(width, height);
-		r.setHidden(false);
-		
-		return r;
-	}
-	
-	private static void removeRectangle(int index) {
-		Rectangle r = columns.remove(index);
-		r.setHidden(true);
-		deletedColumns.add(r);
-	}
-	
-	static void setBGColor(Color color) {
-		window.setBackgroundColor(color);
-	}
-	
-	static void setStepByStep(boolean sbs) {
-		step.setHidden(!sbs);
-		step.setActivated(!sbs);
-	}
 	
 	/**
 	 * Calling this method on a method ensures that the values get swapped even if the list isn't a {@link VisualList}
@@ -75,38 +33,27 @@ public class VisualList extends ArrayList<Integer> {
 		}
 	}
 	
-	private static final View window = new View(
-			minWindowWidth.get(),
-			minWindowHeight.get(),
-			"Visual List"
-	);
-	private static final Button step = new Button(
-			1, 1,
-			30, 20,
-			"Step", Color.GRAY
-	);
-	public static final List<Rectangle> columns = new ArrayList<>();
-	public static final List<Rectangle> deletedColumns = new ArrayList<>();
+	public static List<Integer> subList(List<Integer> list, int i1, int i2) {
+		if (list instanceof VisualList vList)
+			return vList.subList(i1, i2);
+		return new ArrayList<>(list.subList(i1, i2));
+	}
 	
-	private static boolean inUse = false;
+	private final List<Rectangle> columns = new ArrayList<>();
+	
+	double baseHeight;
 	
 	@Visual
 	public VisualList() {
 		super();
-		
-		if (inUse)
-			throw new RuntimeException("Currently not more than one list is supported");
-		
-		inUse = true;
+		ListWindow.add(this);
 	}
 	@Visual
 	public VisualList(List<Integer> list) {
 		super(list);
-		
-		if (inUse)
-			throw new RuntimeException("Currently not more than one list is supported");
-		
-		inUse = true;
+		for (Integer i : list)
+			columns.add(getRectangle(i));
+		ListWindow.add(this);
 	}
 	
 	@Visual
@@ -116,7 +63,7 @@ public class VisualList extends ArrayList<Integer> {
 		
 		LOGGER.log.println("Adding int %d", e);
 		
-		columns.add(newRectangle(e));
+		columns.add(getRectangle(e));
 		
 		updateWindow();
 		
@@ -132,7 +79,7 @@ public class VisualList extends ArrayList<Integer> {
 		
 		if (stepByStep.get()) {
 			columns.get(index).setColor(removedColumnColor.get());
-			step();
+			ListWindow.step();
 		}
 		
 		removeRectangle(index);
@@ -149,7 +96,7 @@ public class VisualList extends ArrayList<Integer> {
 		
 		LOGGER.log.println("Adding %d at %d", element, index);
 		
-		columns.add(index, newRectangle(element));
+		columns.add(index, getRectangle(element));
 		
 		updateWindow();
 	}
@@ -177,7 +124,7 @@ public class VisualList extends ArrayList<Integer> {
 		
 		List<Rectangle> l = new ArrayList<>();
 		for (Integer i : c) {
-			l.add(newRectangle(i));
+			l.add(getRectangle(i));
 		}
 		columns.addAll(l);
 		
@@ -195,7 +142,7 @@ public class VisualList extends ArrayList<Integer> {
 		
 		List<Rectangle> l = new ArrayList<>();
 		for (Integer i : c) {
-			l.add(newRectangle(i));
+			l.add(getRectangle(i));
 		}
 		columns.addAll(index, l);
 		
@@ -213,13 +160,50 @@ public class VisualList extends ArrayList<Integer> {
 		
 		if (Config.stepByStep.get()) {
 			columns.forEach(c -> c.setColor(removedColumnColor.get()));
-			step();
+			ListWindow.step();
 		}
 		
 		for (int i = 0; i < columns.size(); i++)
 			removeRectangle(i);
 		
 		updateWindow();
+	}
+	
+	@Visual
+	@Override
+	public VisualList subList(int fromIndex, int toIndex) {
+		Rectangle r;
+		for (int i = fromIndex; i < toIndex; i++) {
+			r = columns.remove(i);
+			r.setHidden(true);
+			ListWindow.recycle(r);
+		}
+		return new VisualList(super.subList(fromIndex, toIndex));
+	}
+	
+	private Rectangle getRectangle(int e) {
+		int offset = columnSpacing.get() + (columnWidth.get() + columnSpacing.get()) * columns.size();
+		int columnHeight = max(e, minColumnHeight.get());
+		Color c = Config.stepByStep.get()
+				? addedColumnColor.get()
+				: defaultColumnColor.get();
+		int y = listHeight.get() - columnSpacing.get() - columnHeight;
+		int width = columnWidth.get();
+		
+		Rectangle r = ListWindow.recycleRectangle();
+		if (r == null) r = new Rectangle(offset, y, width, columnHeight, c);
+		
+		r.moveTo(offset, y);
+		r.scaleTo(width, columnHeight);
+		r.setHidden(false);
+		
+		return r;
+	}
+	
+	private void removeRectangle(int index) {
+		Rectangle r = columns.remove(index);
+		r.setHidden(true);
+		ListWindow.recycle(r);
 	}
 	
 	/**
@@ -239,90 +223,52 @@ public class VisualList extends ArrayList<Integer> {
 		updateWindow();
 	}
 	
-	private void updateWindow() {
-		if (isEmpty()) {
-			window.setSize(
-					minWindowWidth.get(),
-					minWindowHeight.get()
-			);
-			return;
-		}
-		
-		int maxVal = Collections.max(this);
-		
-		LOGGER.debug.println("Max value: %d", maxVal);
-		
-		int height = maxVal + (columnSpacing.get() * 2);
-		height = max(height, minWindowHeight.get());
-		int width = ((columnWidth.get() + columnSpacing.get()) * size()) + columnSpacing.get();
-		width = max(width, minWindowWidth.get());
-		
-		LOGGER.debug.println("Window size: W%dxH%d", width, height);
-		
-		window.setSize(
-				width,
-				height + (Config.stepByStep.get() ? 30 : 0)
-		);
-		
-		LOGGER.debug.println("size: %d, columns.size: %d", size(), columns.size());
+	void updateWindow() {
+		if (isEmpty()) return;
 		
 		if (size() != columns.size())
 			throw new IllegalStateException("An internal error occurred");
 		
 		updateColumns();
 		
-		step();
+		ListWindow.step();
 		columns.forEach(c -> c.setColor(defaultColumnColor.get()));
 	}
 	
 	private void updateColumns() {
 		LOGGER.debug.println("Updating columns");
-		LOGGER.debug.println("s %d, c %d", size(), columns.size());
 		
 		int offset = columnSpacing.get();
+		int listHeight = Config.listHeight.get();
 		List<Integer> scaled = scaledList();
 		for (int i = 0; i < size(); i++) {
 			int value = scaled.get(i);
-			int columnHeight = max(value, minColumnHeight.get());
 			Rectangle r = columns.get(i);
-			r.scaleTo(columnWidth.get(), columnHeight);
-			r.moveTo(offset, window.getHeight() - columnSpacing.get() - columnHeight);
+			r.scaleTo(columnWidth.get(), value);
+			r.moveTo(offset, baseHeight - value + listHeight);
 			
-			LOGGER.debug.println("Setting column %d to height %d at %d with value %d",
-			              i, columnHeight, offset, value);
+			LOGGER.debug.println("Setting column %d to height %d at %d",
+			              i, value, offset);
 			
 			offset += columnWidth.get() + columnSpacing.get();
 		}
 	}
 	
-	public void step() {
-		if (stepDelay.get() != null) {
-			window.wait((int) (stepDelay.get() * 100));
-			return;
-		}
-		if (!stepByStep.get()) return;
-		do {
-			window.wait(100);
-		} while (!step.clicked());
-	}
-	
-	/*private List<Integer> scaledList() {
-		int max = max(Collections.max(this), minWindowHeight.get());
-		return stream().map(
-				value -> (int) Math.round(
-						minColumnHeight.get() + (double) value * (max - minColumnHeight.get()) / max
-				)
-		).toList();
-	}*/
-	
-	public List<Integer> scaledList() {
+	List<Integer> scaledList() {
 		int min = Collections.min(this);
-		int max = max(Collections.max(this), minWindowHeight.get());
-		int minHeight = minColumnHeight.get();
+		int max = Math.min(Collections.max(this), listHeight.get());
+		int minHeight = Math.max(min, minColumnHeight.get());
 		
 		return stream()
-				.map(value -> minHeight + (value - min) * (max - minHeight) / (max - min))
+				.map(value -> minHeight
+						+ (value - min) * (listHeight.get() - minHeight)
+						/ (max - min))
 				.toList();
+	}
+	
+	int calculateWidth() {
+		int w = columnSpacing.get();
+		return w + (columnSpacing.get() + columnWidth.get()) * columns.size();
 	}
 	
 	public boolean isOrdered() {
@@ -336,7 +282,7 @@ public class VisualList extends ArrayList<Integer> {
 		
 		columns.forEach(c -> c.setColor(sortedColumnColor.get()));
 		
-		step();
+		ListWindow.step();
 		updateWindow();
 		
 		return true;

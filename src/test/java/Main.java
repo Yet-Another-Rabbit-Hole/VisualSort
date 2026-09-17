@@ -12,34 +12,16 @@ public class Main {
 		net.YaRh.CheapLog.Config.thread.disable();
 		net.YaRh.CheapLog.Config.location.disable();
 		
-		Config.stepByStep.disable();
-		Config.columnWidth.set(3);
+		Config.stepByStep.enable();
 		
 		//List<Integer> l = new VisualList();
-		VisualList l = new VisualList();
 		
-		l.add(5);
-		l.add(10);
-		l.add(20);
+		VisualList l1 = new VisualList(List.of(1,2,3));
 		
-		l.remove(2);
+		VisualList l2 = new VisualList(List.of(3,2,1));
 		
-		l.addAll(List.of(1, 3, 7, 8, 2, 3, 7, 4));
+		l1.add(6);
 		
-		//l.isOrdered();
-		
-		l.sort();
-		
-		log.println(l.scaledList().get(2));
-		log.println(l.get(2));
-		log.println(VisualList.columns.get(2).getShapeHeight());
-		
-		log.println(l.scaledList().get(1));
-		log.println(l.get(1));
-		log.println(VisualList.columns.get(1).getShapeHeight());
-		
-		log.println(l.scaledList().get(3));
-		log.println(l.get(3));
-		log.println(VisualList.columns.get(3).getShapeHeight());
+		l2.remove(1);
 	}
 }
