@@ -11,6 +11,11 @@ import java.util.List;
 
 import static net.YaRh.VisualSort.Config.*;
 
+/**
+ * Handles the window and placement of single lists
+ *
+ * @since 2.0.0
+ */
 public final class ListWindow {
 	public static final Logger LOGGER = new Logger("ListWindow");
 	

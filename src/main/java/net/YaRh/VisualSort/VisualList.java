@@ -9,11 +9,12 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-import static java.lang.Math.max;
-import static java.lang.Math.min;
 import static net.YaRh.CheapLog.Logging.info;
 import static net.YaRh.VisualSort.Config.*;
 
+/**
+ * Displays its contents as columns in a window
+ */
 public class VisualList extends ArrayList<Integer> {
 	public static final Logger LOGGER = new Logger("VisualList");
 	
@@ -183,7 +184,7 @@ public class VisualList extends ArrayList<Integer> {
 	
 	private Rectangle getRectangle(int e) {
 		int offset = columnSpacing.get() + (columnWidth.get() + columnSpacing.get()) * columns.size();
-		int columnHeight = max(e, minColumnHeight.get());
+		int columnHeight = Math.max(e, minColumnHeight.get());
 		Color c = Config.stepByStep.get()
 				? addedColumnColor.get()
 				: defaultColumnColor.get();
