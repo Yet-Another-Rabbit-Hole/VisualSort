@@ -24,7 +24,7 @@ public class Config {
 	 */
 	public static final Attribute<Double> stepDelay = new Attribute<>();
 	
-	public static final Attribute<Color> backgroundColor = new Attribute<>(Color.GRAY, ListWindow::setBGColor);
+	public static final Attribute<Color> backgroundColor = new Attribute<>(Color.WHITE, ListWindow::setBGColor);
 	public static final Attribute<Color> defaultColumnColor = new Attribute<>(Color.BLUE);
 	public static final Attribute<Color> removedColumnColor = new Attribute<>(Color.RED);
 	public static final Attribute<Color> addedColumnColor = new Attribute<>(Color.GREEN);

@@ -4,18 +4,18 @@ import net.YaRh.CheapLog.logging.Logger;
 import sas.Rectangle;
 
 import java.awt.*;
+import java.io.InvalidObjectException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-import static net.YaRh.CheapLog.Logging.info;
 import static net.YaRh.VisualSort.Config.*;
 
 /**
  * Displays its contents as columns in a window
  */
-public class VisualList extends ArrayList<Integer> {
+public class VisualList extends ArrayList<Integer> implements AutoCloseable {
 	public static final Logger LOGGER = new Logger("VisualList");
 	
 	/**
@@ -34,9 +34,9 @@ public class VisualList extends ArrayList<Integer> {
 		}
 	}
 	
-	public static List<Integer> subList(List<Integer> list, int i1, int i2) {
+	public static List<Integer> newFromList(List<Integer> list, int i1, int i2) {
 		if (list instanceof VisualList vList)
-			return vList.subList(i1, i2);
+			return new VisualList(vList.subList(i1, i2));
 		return new ArrayList<>(list.subList(i1, i2));
 	}
 	
@@ -51,24 +51,30 @@ public class VisualList extends ArrayList<Integer> {
 	}
 	@Visual
 	public VisualList(List<Integer> list) {
-		super(list);
+		super(new ArrayList<>(list));
 		for (Integer i : list)
 			columns.add(getRectangle(i));
+		
 		ListWindow.add(this);
+		resetColumnColors();
 	}
 	
 	@Visual
 	@Override
 	public boolean add(Integer e) {
-		if (!super.add(e)) return false;
+		boolean res = super.add(e);
 		
 		LOGGER.log.println("Adding int %d", e);
 		
 		columns.add(getRectangle(e));
 		
-		updateWindow();
+		setColumnColor(columns.size() - 1, addedColumnColor.get());
 		
-		return true;
+		ListWindow.updateWindow();
+		ListWindow.step();
+		resetColumnColors();
+		
+		return res;
 	}
 	
 	@Visual
@@ -78,14 +84,13 @@ public class VisualList extends ArrayList<Integer> {
 		
 		LOGGER.log.println("Removing int at %d", index);
 		
-		if (stepByStep.get()) {
-			columns.get(index).setColor(removedColumnColor.get());
-			ListWindow.step();
-		}
+		setColumnColor(index, removedColumnColor.get());
+		ListWindow.step();
 		
 		removeRectangle(index);
 		
-		updateWindow();
+		ListWindow.updateWindow();
+		resetColumnColors();
 		
 		return res;
 	}
@@ -99,7 +104,9 @@ public class VisualList extends ArrayList<Integer> {
 		
 		columns.add(index, getRectangle(element));
 		
-		updateWindow();
+		ListWindow.updateWindow();
+		ListWindow.step();
+		resetColumnColors();
 	}
 	
 	@Visual
@@ -109,9 +116,11 @@ public class VisualList extends ArrayList<Integer> {
 		
 		LOGGER.log.println("Setting value at %d to %d", index, element);
 		
-		columns.get(index).setColor(alteredColumnColor.get());
+		setColumnColor(index, alteredColumnColor.get());
 		
-		updateWindow();
+		updateColumns();
+		ListWindow.step();
+		resetColumnColors();
 		
 		return res;
 	}
@@ -119,25 +128,26 @@ public class VisualList extends ArrayList<Integer> {
 	@Visual
 	@Override
 	public boolean addAll(Collection<? extends Integer> c) {
-		if (!super.addAll(c)) return false;
+		boolean res = super.addAll(c);
 		
 		LOGGER.log.println("Adding list of %d items", c.size());
 		
 		List<Rectangle> l = new ArrayList<>();
-		for (Integer i : c) {
+		for (Integer i : c)
 			l.add(getRectangle(i));
-		}
 		columns.addAll(l);
 		
-		updateWindow();
+		ListWindow.updateWindow();
+		ListWindow.step();
+		resetColumnColors();
 		
-		return true;
+		return res;
 	}
 	
 	@Visual
 	@Override
 	public boolean addAll(int index, Collection<? extends Integer> c) {
-		if (!super.addAll(index, c)) return false;
+		boolean res = super.addAll(index, c);
 		
 		LOGGER.log.println("Adding list of %d items at index %d", c.size(), index);
 		
@@ -147,9 +157,11 @@ public class VisualList extends ArrayList<Integer> {
 		}
 		columns.addAll(index, l);
 		
-		updateWindow();
+		ListWindow.updateWindow();
+		ListWindow.step();
+		resetColumnColors();
 		
-		return true;
+		return res;
 	}
 	
 	@Visual
@@ -159,27 +171,48 @@ public class VisualList extends ArrayList<Integer> {
 		
 		LOGGER.log.println("Clearing list");
 		
-		if (Config.stepByStep.get()) {
-			columns.forEach(c -> c.setColor(removedColumnColor.get()));
-			ListWindow.step();
-		}
+		setColumnColor(removedColumnColor.get());
+		ListWindow.step();
 		
-		for (int i = 0; i < columns.size(); i++)
-			removeRectangle(i);
+		clearRectangles();
 		
-		updateWindow();
+		ListWindow.updateWindow();
 	}
 	
 	@Visual
 	@Override
-	public VisualList subList(int fromIndex, int toIndex) {
-		Rectangle r;
-		for (int i = fromIndex; i < toIndex; i++) {
-			r = columns.remove(i);
-			r.setHidden(true);
-			ListWindow.recycle(r);
-		}
-		return new VisualList(super.subList(fromIndex, toIndex));
+	protected void removeRange(int fromIndex, int toIndex) {
+		Color color = removedColumnColor.get();
+		for (int i = fromIndex; i <= toIndex; i++)
+			setColumnColor(i, color);
+		
+		ListWindow.step();
+		
+		for (int i = fromIndex; i <= toIndex; i++)
+			removeRectangle(i);
+		
+		super.removeRange(fromIndex, toIndex);
+		
+		ListWindow.updateWindow();
+		resetColumnColors();
+	}
+	
+	@Visual
+	@Override
+	public List<Integer> subList(int fromIndex, int toIndex) {
+		return new VisualSubList(this, fromIndex, toIndex - 1);
+	}
+	
+	@Override
+	public void close() {
+		LOGGER.log.println("Closing list");
+		
+		setColumnColor(removedColumnColor.get());
+		ListWindow.step();
+		
+		clearRectangles();
+		
+		ListWindow.remove(this);
 	}
 	
 	private Rectangle getRectangle(int e) {
@@ -193,18 +226,23 @@ public class VisualList extends ArrayList<Integer> {
 		
 		Rectangle r = ListWindow.recycleRectangle();
 		if (r == null) r = new Rectangle(offset, y, width, columnHeight, c);
-		
-		r.moveTo(offset, y);
-		r.scaleTo(width, columnHeight);
-		r.setHidden(false);
+		else {
+			r.moveTo(offset, y);
+			r.scaleTo(width, columnHeight);
+			r.setHidden(false);
+			r.setColor(c);
+		}
 		
 		return r;
 	}
 	
 	private void removeRectangle(int index) {
-		Rectangle r = columns.remove(index);
-		r.setHidden(true);
-		ListWindow.recycle(r);
+		ListWindow.recycle(columns.remove(index));
+	}
+	
+	private void clearRectangles() {
+		columns.forEach(ListWindow::recycle);
+		columns.clear();
 	}
 	
 	/**
@@ -218,33 +256,48 @@ public class VisualList extends ArrayList<Integer> {
 		
 		LOGGER.log.println("Swapping ints %d and %d", i1, i2);
 		
-		columns.get(i1).setColor(swappedColumnColor.get());
-		columns.get(i2).setColor(swappedColumnColor.get());
-		
-		updateWindow();
-	}
-	
-	void updateWindow() {
-		if (isEmpty()) return;
-		
-		if (size() != columns.size())
-			throw new IllegalStateException("An internal error occurred");
+		setColumnColor(i1, swappedColumnColor.get());
+		setColumnColor(i2, swappedColumnColor.get());
 		
 		updateColumns();
-		
 		ListWindow.step();
-		columns.forEach(c -> c.setColor(defaultColumnColor.get()));
+		resetColumnColors();
+	}
+	
+	void windowUpdate() {
+		if (size() != columns.size())
+			ListWindow.illegalState(new InvalidObjectException("List not synced with visuals"));
+		
+		updateColumns();
+	}
+	
+	void resetColumnColors() {
+		Color color = defaultColumnColor.get();
+		columns.forEach(r -> r.setColor(color));
+	}
+	
+	private void setColumnColor(Color color) {
+		if (Config.stepByStep.get()) columns.forEach(r -> r.setColor(color));
+	}
+	
+	private void setColumnColor(int index, Color color) {
+		if (Config.stepByStep.get()) columns.get(index).setColor(color);
 	}
 	
 	private void updateColumns() {
+		if (isEmpty()) return;
+		
 		LOGGER.debug.println("Updating columns");
 		
 		int offset = columnSpacing.get();
 		int listHeight = Config.listHeight.get();
 		List<Integer> scaled = scaledList();
+		
+		int value;
+		Rectangle r;
 		for (int i = 0; i < size(); i++) {
-			int value = scaled.get(i);
-			Rectangle r = columns.get(i);
+			value = scaled.get(i);
+			r = columns.get(i);
 			r.scaleTo(columnWidth.get(), value);
 			r.moveTo(offset, baseHeight - value + listHeight);
 			
@@ -263,13 +316,14 @@ public class VisualList extends ArrayList<Integer> {
 		return stream()
 				.map(value -> minHeight
 						+ (value - min) * (listHeight.get() - minHeight)
-						/ (max - min))
+						/ (max - min)
+				)
 				.toList();
 	}
 	
 	int calculateWidth() {
-		int w = columnSpacing.get();
-		return w + (columnSpacing.get() + columnWidth.get()) * columns.size();
+		int spacing = columnSpacing.get();
+		return spacing + (spacing + columnWidth.get()) * columns.size();
 	}
 	
 	public boolean isOrdered() {
@@ -281,10 +335,10 @@ public class VisualList extends ArrayList<Integer> {
 		
 		if (!r) return false;
 		
-		columns.forEach(c -> c.setColor(sortedColumnColor.get()));
+		setColumnColor(sortedColumnColor.get());
 		
 		ListWindow.step();
-		updateWindow();
+		resetColumnColors();
 		
 		return true;
 	}
@@ -292,11 +346,74 @@ public class VisualList extends ArrayList<Integer> {
 	public void sort() {
 		LOGGER.log.println("Sorting list");
 		
-		info.println(this);
 		Collections.sort(this);
-		info.println(this);
 		
+		setColumnColor(sortedColumnColor.get());
 		updateColumns();
-		isOrdered();
+		
+		ListWindow.step();
+		resetColumnColors();
+	}
+	
+	private static class VisualSubList extends VisualList {
+		
+		private final VisualList root;
+		private final VisualSubList parent;
+		private final int offset;
+		private final int length;
+		
+		public VisualSubList(VisualList root, int offset, int length) {
+			this.root = root;
+			this.parent = null;
+			this.offset = offset;
+			this.length = length;
+		}
+		public VisualSubList(VisualSubList parent, int offset, int length) {
+			this.root = parent.root;
+			this.parent = parent;
+			this.offset = parent.offset + offset;
+			this.length = length;
+		}
+		
+		@Override
+		public boolean add(Integer e) {
+			root.add(offset + length, e);
+			return true;
+		}
+		
+		@Override
+		public Integer remove(int index) {
+			return root.remove(offset + index);
+		}
+		
+		@Override
+		public void add(int index, Integer element) {
+			root.add(offset + index, element);
+		}
+		
+		@Override
+		public Integer set(int index, Integer element) {
+			return root.set(offset + index, element);
+		}
+		
+		@Override
+		public boolean addAll(Collection<? extends Integer> c) {
+			return root.addAll(offset + length, c);
+		}
+		
+		@Override
+		public boolean addAll(int index, Collection<? extends Integer> c) {
+			return root.addAll(offset + index, c);
+		}
+		
+		@Override
+		public void clear() {
+			root.removeRange(offset, offset + length);
+		}
+		
+		@Override
+		public void swap(int i1, int i2) {
+			root.swap(offset + i1, offset + i2);
+		}
 	}
 }

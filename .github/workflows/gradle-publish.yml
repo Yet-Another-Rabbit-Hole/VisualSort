@@ -11,6 +11,11 @@
 name: Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to process'
+        required: true
   push:
     tags:
       - 'v*'
@@ -24,7 +29,19 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v6
+      - name: Determine release tag
+        id: release
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout release
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.release.outputs.tag }}
 
       - uses: actions/setup-java@v4
         with:
@@ -46,6 +63,7 @@ jobs:
         run: ./gradlew shadowJar
 
       - name: Publish to GitHub Packages
+        continue-on-error: true
         run: ./gradlew publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -54,16 +72,27 @@ jobs:
         run: ./gradlew javadoc
 
       - name: Package Javadocs
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           cd build/docs
-          zip -r "../../${{ github.ref_name }}-javadoc.zip" javadoc
+          zip -r "../../${RELEASE_TAG}-javadoc.zip" javadoc
 
-      - name: Create Release
+      - name: Create or update Release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          gh release create "${{ github.ref_name }}" \
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists"
+          else
+            echo "Creating release $RELEASE_TAG"
+            gh release create "$RELEASE_TAG" \
+              --title "$RELEASE_TAG" \
+              --generate-notes
+          fi
+
+          gh release upload "$RELEASE_TAG" \
             build/libs/*.jar \
-            "${{ github.ref_name }}-javadoc.zip" \
-            --title "${{ github.ref_name }}" \
-            --generate-notes
+            "${RELEASE_TAG}-javadoc.zip" \
+            --clobber

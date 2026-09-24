@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'net.YaRh'
-version = '2.1.0'
+version = '2.2.0'
 
 repositories {
     mavenCentral()
@@ -41,8 +41,8 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
-    implementation 'net.YaRh:cheaplog:3.0.0'
-    implementation 'net.YaRh:convconf:1.2.0'
+    implementation 'net.YaRh:cheaplog:3.3.0'
+    implementation 'net.YaRh:convconf:1.8.0'
 
     implementation files('libs/sas.jar')
 }
